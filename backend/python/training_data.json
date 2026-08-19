@@ -1,0 +1,53 @@
+{
+  "custom_instructions": "Prioritize rapid triage, recommend accurate specialists among General Physician, Cardiologist, Dermatologist, Neurologist, Psychologist, Nutritionist, Orthopedic, and Pediatrician, and always provide safe clinical questions for consultation.",
+  "training_examples": [
+    {
+      "symptoms": "Severe sudden chest tightness, shortness of breath, left arm pain",
+      "recommended_specialist": "Cardiologist",
+      "possible_conditions": ["Angina", "Myocardial Infarction", "Coronary Artery Disease"],
+      "advice": "Seek immediate emergency medical attention. Avoid physical exertion."
+    },
+    {
+      "symptoms": "Itchy red rash with dry flaking patches across the face and elbows",
+      "recommended_specialist": "Dermatologist",
+      "possible_conditions": ["Eczema", "Psoriasis", "Contact Dermatitis"],
+      "advice": "Keep skin hydrated with mild emollients and avoid harsh soaps until examined."
+    },
+    {
+      "symptoms": "Chronic recurring throbbing headache on one side of head with sensitivity to light and nausea",
+      "recommended_specialist": "Neurologist",
+      "possible_conditions": ["Migraine with Aura", "Tension-type Headache", "Cluster Headache"],
+      "advice": "Rest in a quiet, dark room, stay hydrated, and maintain a symptom trigger diary."
+    },
+    {
+      "symptoms": "Persistent low mood, excessive worry, sleep disruption, and anxiety for over 3 months",
+      "recommended_specialist": "Psychologist",
+      "possible_conditions": ["Generalized Anxiety Disorder", "Major Depressive Disorder"],
+      "advice": "Consider cognitive behavioral therapy (CBT) and structured lifestyle routines."
+    },
+    {
+      "symptoms": "Unexplained weight gain, chronic lethargy, dietary digestive discomfort, and high cholesterol",
+      "recommended_specialist": "Nutritionist",
+      "possible_conditions": ["Metabolic Syndrome", "Dietary Deficiency", "Dyslipidemia"],
+      "advice": "Adopt a balanced whole-food diet with appropriate macro nutrient distribution."
+    },
+    {
+      "symptoms": "Persistent knee joint pain, swelling, and cracking sound when climbing stairs",
+      "recommended_specialist": "Orthopedic",
+      "possible_conditions": ["Osteoarthritis", "Meniscus Tear", "Patellofemoral Syndrome"],
+      "advice": "Avoid high-impact activities, apply cold/warm compress, and consult an orthopedic specialist."
+    },
+    {
+      "symptoms": "High fever, barking cough, and loss of appetite in a 4-year-old child",
+      "recommended_specialist": "Pediatrician",
+      "possible_conditions": ["Croup", "Upper Respiratory Tract Infection", "Viral Pharyngitis"],
+      "advice": "Ensure adequate fluid intake and consult a pediatrician immediately for child evaluation."
+    },
+    {
+      "symptoms": "Mild fever, runny nose, sore throat, and body ache for 2 days",
+      "recommended_specialist": "General Physician",
+      "possible_conditions": ["Common Cold", "Viral Influenza", "Acute Viral Rhinitis"],
+      "advice": "Get plenty of rest, drink warm fluids, and monitor body temperature."
+    }
+  ]
+}
