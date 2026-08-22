@@ -197,7 +197,9 @@ DoctorRouter.get("/get-all-user-problems/", DoctorMiddleware, async (req, res) =
         const UserProblems = await UserProblemModel.find({})
             .populate("user", "username email location city pin_code")
             .populate("name", "first_name last_name date_of_birth")
-            .populate("type", "name description");
+            .populate("type", "name description")
+            .sort({ created_at: -1 });
+
         res.json({
             UserProblems
         });
@@ -209,26 +211,33 @@ DoctorRouter.get("/get-all-user-problems/", DoctorMiddleware, async (req, res) =
     }
 });
 
-// Router where the doctor gives his solution for the problem of the users
+// Router where the doctor gives his solution for the problem of the users and can correct medicine recommendations
 DoctorRouter.post("/solution-of-user-problem/:_id", DoctorMiddleware, async (req, res) => {
+    const MedicineSchema = z.object({
+        name: z.string().min(1),
+        dosage: z.string().optional(),
+        purpose: z.string().optional(),
+        instructions: z.string().optional()
+    });
+
     const ValidEntry = z.object({
         verifyIsTrue: z.boolean(),
-        solution: z.string().optional()
-    })
+        solution: z.string().optional(),
+        corrected_medicines: z.array(MedicineSchema).optional()
+    });
     const problemId = req.params._id;
-    const { verifyIsTrue, solution } = req.body;
+    const { verifyIsTrue, solution, corrected_medicines } = req.body;
 
     const EntryIsCorrect = ValidEntry.safeParse({
-        verifyIsTrue, solution
+        verifyIsTrue, solution, corrected_medicines
     });
 
     if (!EntryIsCorrect.success) {
         const errorMessage = EntryIsCorrect.error.issues.map(issue => issue.message).join(", ");
-        console.log("An error has occured. The error is: " + errorMessage);
-        res.status(400).json({
-            error: `An error has occured. The error is: ${errorMessage}`
+        console.log("An error has occurred: " + errorMessage);
+        return res.status(400).json({
+            error: `Validation error: ${errorMessage}`
         });
-        return;
     }
 
     try {
@@ -237,18 +246,30 @@ DoctorRouter.post("/solution-of-user-problem/:_id", DoctorMiddleware, async (req
             doctor: doctorId,
             user_problem: problemId,
             verifyIsTrue,
-            solution: solution || (verifyIsTrue ? "AI recommendation verified by doctor." : "Doctor provided revised clinical correction.")
+            solution: solution || (verifyIsTrue ? "AI recommendation and medicine list verified by doctor." : "Doctor provided revised clinical correction and prescriptions."),
+            corrected_medicines: corrected_medicines || []
         });
 
-        // Update problem status based on doctor verification
-        await UserProblemModel.findByIdAndUpdate(problemId, {
+        // Update problem status and update medicines if doctor provided corrected medicines
+        const updatePayload = {
             status: verifyIsTrue ? "doctor_verified" : "doctor_corrected"
-        });
+        };
+
+        if (corrected_medicines && corrected_medicines.length > 0) {
+            updatePayload["ai_analysis.recommended_medicines"] = corrected_medicines.map(m => ({
+                name: m.name,
+                dosage: m.dosage || "",
+                purpose: m.purpose || "",
+                advice: m.instructions || "Verified & Prescribed by attending physician"
+            }));
+        }
+
+        await UserProblemModel.findByIdAndUpdate(problemId, updatePayload);
 
         res.json({
             message: verifyIsTrue 
-                ? "AI solution verified and approved by doctor!" 
-                : "AI solution corrected and revised clinical guidance submitted!",
+                ? "AI solution & medications verified and approved by doctor!" 
+                : "AI solution corrected and revised physician clinical guidance & medications submitted!",
             doctormodelsolution
         });
     } catch (err) {
@@ -265,14 +286,18 @@ DoctorRouter.get("/all-appointments/", DoctorMiddleware, async (req, res) => {
     try {
         const DoctorsAppointments = await UserAppointmentWithDoctorModel.find({
             doctor: doctorId
-        });
+        })
+            .populate("user", "username email location city pin_code")
+            .populate("problem", "problem description ai_analysis status")
+            .sort({ appointment_date: -1, created_at: -1 });
+
         res.json({
             DoctorsAppointments
         });
     } catch (err) {
-        console.log(`an error has occured and the error is: ${err}`);
+        console.log(`An error has occurred: ${err}`);
         res.status(500).json({
-            error: `an error has occured and the error is: ${err}`
+            error: `An error has occurred: ${err}`
         });
     }
 });
@@ -293,10 +318,9 @@ DoctorRouter.put("/appointment/:_id", DoctorMiddleware, async (req, res) => {
     if (!isValidEntry.success) {
         const errorMessage = isValidEntry.error.issues.map(issue => issue.message).join(", ");
         console.log("An error has occured. The error is: " + errorMessage);
-        res.status(400).json({
+        return res.status(400).json({
             error: `An error has occured. The error is: ${errorMessage}`
         });
-        return;
     }
     
     try {
@@ -338,4 +362,4 @@ DoctorRouter.post("/logout/", DoctorMiddleware, (req, res) => {
 
 module.exports = {
     DoctorRouter
-}
+};

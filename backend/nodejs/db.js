@@ -38,13 +38,28 @@ const userProblemSchema = new Schema({
     name: { type: ObjectId, ref: "members" },
     problem: String,
     description: String,
+    symptoms: String,
     type: { type: ObjectId, ref: "problem_type" },
+    patient_profile: {
+        symptoms: String,
+        age: Number,
+        gender: String,
+        duration: String,
+        medical_history: String
+    },
     ai_analysis: {
+        identified_health_problem: String,
         recommended_specialist: String,
         all_possible_specialists: [String],
         possible_conditions: [String],
         triage_urgency: String,
         analysis_summary: String,
+        recommended_medicines: [{
+            name: String,
+            dosage: String,
+            purpose: String,
+            advice: { type: String, default: "Ask the nearby specialist before intake" }
+        }],
         suggested_questions_for_doctor: [String],
         general_health_advice: [String],
         disclaimer: String
@@ -55,13 +70,14 @@ const userProblemSchema = new Schema({
 
 // Appointment of the doctor the user does online
 const userAppointmentWithDoctorSchema = new Schema({
-    user: ObjectId,
-    doctor: ObjectId,
-    problem: ObjectId,
+    user: { type: ObjectId, ref: "users" },
+    doctor: { type: ObjectId, ref: "doctors" },
+    problem: { type: ObjectId, ref: "user_problems" },
     appointment_date: { type: Date, default: Date.now },
     appointment_time: String,
     done_by_doctor: { type: Boolean, default: false },
-    done_by_user: { type: Boolean, default: false }
+    done_by_user: { type: Boolean, default: false },
+    created_at: { type: Date, default: Date.now }
 });
 
 // Schemas for admins
@@ -90,12 +106,19 @@ const doctorSchema = new Schema({
     close_time: String
 });
 
-// the validatation by the doctor for the AI solution
+// the validation by the doctor for the AI solution & medicine modifications
 const problemSolutionByDoctorSchema = new Schema({
-    doctor: ObjectId,
-    user_problem: ObjectId,
+    doctor: { type: ObjectId, ref: "doctors" },
+    user_problem: { type: ObjectId, ref: "user_problems" },
     verifyIsTrue: Boolean,
-    solution: { type: String, default: "No solution provided by the doctor" }
+    solution: { type: String, default: "No solution provided by the doctor" },
+    corrected_medicines: [{
+        name: String,
+        dosage: String,
+        purpose: String,
+        instructions: String
+    }],
+    created_at: { type: Date, default: Date.now }
 });
 
 // the domain of problem the user is facing

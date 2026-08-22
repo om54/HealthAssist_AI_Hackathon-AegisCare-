@@ -10,6 +10,9 @@ def get_database():
     global client, db
     if db is None and MONGOOSE_URL:
         client = AsyncIOMotorClient(MONGOOSE_URL)
-        # Extract default db name or default to 'test' / cluster default
-        db = client.get_default_database()
+        # Extract default db name or default to 'HealthAssist_AI_Hackathon' / cluster default
+        try:
+            db = client.get_default_database()
+        except Exception:
+            db = client["HealthAssist_AI_Hackathon"]
     return db

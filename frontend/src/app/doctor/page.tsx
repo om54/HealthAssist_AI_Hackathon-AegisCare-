@@ -17,7 +17,10 @@ import {
   FileCheck,
   Send,
   MessageSquare,
-  Activity
+  Activity,
+  Pill,
+  Trash2,
+  Plus
 } from "lucide-react";
 
 export default function DoctorPortal() {
@@ -33,6 +36,10 @@ export default function DoctorPortal() {
   const [selectedProblem, setSelectedProblem] = useState<any | null>(null);
   const [verifyIsTrue, setVerifyIsTrue] = useState(true);
   const [solutionText, setSolutionText] = useState("");
+  const [medicinesList, setMedicinesList] = useState<any[]>([]);
+  const [newMedName, setNewMedName] = useState("");
+  const [newMedDosage, setNewMedDosage] = useState("");
+  const [newMedPurpose, setNewMedPurpose] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -73,8 +80,38 @@ export default function DoctorPortal() {
   const handleOpenReview = (prob: any) => {
     setSelectedProblem(prob);
     setVerifyIsTrue(true);
-    setSolutionText(prob.ai_analysis?.general_health_advice?.join("\n") || "");
+    setSolutionText(prob.ai_analysis?.analysis_summary || "");
+    const initialMeds = prob.ai_analysis?.recommended_medicines || [];
+    setMedicinesList(initialMeds.map((m: any) => ({
+      name: m.name || "",
+      dosage: m.dosage || "",
+      purpose: m.purpose || "",
+      instructions: m.advice || "Prescribed by physician"
+    })));
+    setNewMedName("");
+    setNewMedDosage("");
+    setNewMedPurpose("");
     setSuccessMessage(null);
+  };
+
+  const handleAddMedicine = () => {
+    if (!newMedName.trim()) return;
+    setMedicinesList([
+      ...medicinesList,
+      {
+        name: newMedName.trim(),
+        dosage: newMedDosage.trim(),
+        purpose: newMedPurpose.trim(),
+        instructions: "Prescribed & verified by physician"
+      }
+    ]);
+    setNewMedName("");
+    setNewMedDosage("");
+    setNewMedPurpose("");
+  };
+
+  const handleRemoveMedicine = (index: number) => {
+    setMedicinesList(medicinesList.filter((_, i) => i !== index));
   };
 
   const handleSubmitSolution = async (e: React.FormEvent) => {
@@ -88,10 +125,11 @@ export default function DoctorPortal() {
         body: JSON.stringify({
           verifyIsTrue,
           solution: solutionText || (verifyIsTrue ? "AI recommendation approved by physician." : "Corrected clinical guidance provided."),
+          corrected_medicines: medicinesList
         }),
       });
 
-      setSuccessMessage(res.message || "Medical evaluation submitted successfully!");
+      setSuccessMessage(res.message || "Medical evaluation and prescription submitted successfully!");
       setTimeout(() => {
         setSelectedProblem(null);
         setSuccessMessage(null);
@@ -242,7 +280,13 @@ export default function DoctorPortal() {
                   )}
 
                   <div className="flex items-center justify-between text-[11px] text-[var(--muted-foreground)] pt-1">
-                    <span>Patient: {prob.user?.username || "Registered User"} (Location: {prob.user?.city || "N/A"})</span>
+                    <span>
+                      Patient: {prob.user?.username ? `${prob.user.username} (${prob.user.city || "Location N/A"})` : (
+                        prob.patient_profile?.age || prob.patient_profile?.gender ? (
+                          `Direct/Guest Patient (${[prob.patient_profile.gender, prob.patient_profile.age ? `${prob.patient_profile.age} yrs` : null].filter(Boolean).join(", ")})`
+                        ) : "Direct AI Triage Case"
+                      )}
+                    </span>
                     <span>Status: <span className="font-semibold text-sky-400 uppercase">{prob.status?.replace(/_/g, " ") || "PENDING"}</span></span>
                   </div>
                 </div>
@@ -301,9 +345,20 @@ export default function DoctorPortal() {
               <h3 className="text-xl font-bold text-[var(--foreground)] mt-0.5">
                 Verify or Correct AI Solution
               </h3>
-              <p className="text-xs text-[var(--muted-foreground)] mt-1">
-                Case: {selectedProblem.problem}
-              </p>
+              <div className="mt-2 p-3 rounded-xl bg-[var(--secondary)] border border-[var(--border)] text-xs space-y-1">
+                <span className="font-bold text-[var(--foreground)] block">Reported Symptoms & Clinical Profile:</span>
+                <p className="text-[var(--muted-foreground)] leading-relaxed">
+                  {selectedProblem.symptoms || selectedProblem.description || selectedProblem.problem}
+                </p>
+                {selectedProblem.patient_profile && (
+                  <div className="flex flex-wrap gap-3 pt-1 text-[11px] text-sky-400 font-semibold">
+                    {selectedProblem.patient_profile.duration && <span>Duration: {selectedProblem.patient_profile.duration}</span>}
+                    {selectedProblem.patient_profile.medical_history && <span>History/Allergies: {selectedProblem.patient_profile.medical_history}</span>}
+                    {selectedProblem.patient_profile.age && <span>Age: {selectedProblem.patient_profile.age}</span>}
+                    {selectedProblem.patient_profile.gender && <span>Gender: {selectedProblem.patient_profile.gender}</span>}
+                  </div>
+                )}
+              </div>
             </div>
 
             {successMessage ? (
@@ -347,6 +402,86 @@ export default function DoctorPortal() {
                   </div>
                 </div>
 
+                {/* Medicine Verification & Correction Section */}
+                <div className="space-y-3 p-4 rounded-2xl bg-[var(--secondary)] border border-[var(--border)]">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-[var(--foreground)] uppercase tracking-wider flex items-center gap-1.5">
+                      <Pill className="w-4 h-4 text-emerald-400" />
+                      Prescription & Medications Audit
+                    </label>
+                    <span className="text-[11px] text-[var(--muted-foreground)]">
+                      {medicinesList.length} medications listed
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {medicinesList.map((med, idx) => (
+                      <div
+                        key={idx}
+                        className="p-2.5 rounded-xl bg-[var(--card)] border border-[var(--border)] flex items-center justify-between gap-2"
+                      >
+                        <div className="text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-[var(--foreground)]">{med.name}</span>
+                            {med.dosage && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                {med.dosage}
+                              </span>
+                            )}
+                          </div>
+                          {med.purpose && (
+                            <p className="text-[11px] text-[var(--muted-foreground)]">{med.purpose}</p>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveMedicine(idx)}
+                          className="p-1.5 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                          title="Remove medication"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Add / Modify Medication Input Bar */}
+                  <div className="pt-2 border-t border-[var(--border)] space-y-2">
+                    <span className="text-[11px] font-semibold text-[var(--muted-foreground)]">Add or Replace Prescribed Medication:</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Medicine name (e.g. Paracetamol)"
+                        value={newMedName}
+                        onChange={(e) => setNewMedName(e.target.value)}
+                        className="p-2 rounded-xl bg-[var(--input)] border border-[var(--border)] text-xs text-[var(--foreground)]"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Dosage (e.g. 500mg SOS)"
+                        value={newMedDosage}
+                        onChange={(e) => setNewMedDosage(e.target.value)}
+                        className="p-2 rounded-xl bg-[var(--input)] border border-[var(--border)] text-xs text-[var(--foreground)]"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Purpose (e.g. Fever & headache)"
+                        value={newMedPurpose}
+                        onChange={(e) => setNewMedPurpose(e.target.value)}
+                        className="p-2 rounded-xl bg-[var(--input)] border border-[var(--border)] text-xs text-[var(--foreground)]"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddMedicine}
+                      className="w-full py-2 rounded-xl text-xs font-bold bg-sky-500/15 text-sky-400 border border-sky-500/30 hover:bg-sky-500 hover:text-white transition-colors flex items-center justify-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add / Update Prescription
+                    </button>
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-xs font-bold text-[var(--foreground)] uppercase tracking-wider mb-1.5">
                     {verifyIsTrue ? "Physician Approval Notes & Advice" : "Physician Clinical Correction & Prescribed Next Steps"} <span className="text-red-400">*</span>
@@ -354,7 +489,7 @@ export default function DoctorPortal() {
                   <textarea
                     value={solutionText}
                     onChange={(e) => setSolutionText(e.target.value)}
-                    rows={5}
+                    rows={4}
                     required
                     placeholder={verifyIsTrue ? "Confirmed appropriate triage. Recommended standard hydration and clinic follow-up." : "AI misdiagnosed condition. Patient requires immediate orthopedic evaluation and MRI."}
                     className="w-full rounded-xl bg-[var(--input)] border border-[var(--border)] p-3 text-sm text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)] resize-none"

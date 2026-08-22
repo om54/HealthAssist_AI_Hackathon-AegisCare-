@@ -26,8 +26,9 @@ export default function PatientDashboard() {
   const { isAuthenticated, role, user } = useAuth();
   const router = useRouter();
 
-  const [activeTab, setActiveTab] = useState<"problems" | "family" | "doctors" | "triage">("problems");
+  const [activeTab, setActiveTab] = useState<"problems" | "appointments" | "doctors" | "family" | "triage">("problems");
   const [problems, setProblems] = useState<any[]>([]);
+  const [appointments, setAppointments] = useState<any[]>([]);
   const [familyMembers, setFamilyMembers] = useState<any[]>([]);
   const [doctorsNearMe, setDoctorsNearMe] = useState<any[]>([]);
   const [solutions, setSolutions] = useState<any[]>([]);
@@ -46,6 +47,7 @@ export default function PatientDashboard() {
   const [appointmentDate, setAppointmentDate] = useState("");
   const [appointmentTime, setAppointmentTime] = useState("10:00");
   const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
+  const [bookingError, setBookingError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -63,8 +65,9 @@ export default function PatientDashboard() {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      const [probRes, famRes, docRes] = await Promise.allSettled([
+      const [probRes, apptRes, famRes, docRes] = await Promise.allSettled([
         apiRequest("/users/all-problems/"),
+        apiRequest("/users/my-appointments/"),
         apiRequest("/users/all-family-members/"),
         apiRequest("/users/doctors-near-me/"),
       ]);
@@ -72,6 +75,9 @@ export default function PatientDashboard() {
       if (probRes.status === "fulfilled") {
         setProblems(probRes.value.userProblems || []);
         setSolutions(probRes.value.solutions || []);
+      }
+      if (apptRes.status === "fulfilled") {
+        setAppointments(apptRes.value.appointments || []);
       }
       if (famRes.status === "fulfilled") {
         setFamilyMembers(famRes.value.familyMembers || []);
@@ -112,10 +118,11 @@ export default function PatientDashboard() {
 
   const handleBookAppointment = async (doctorId: string) => {
     if (!selectedProblemId) {
-      alert("Please select a reported health problem to link with this appointment.");
+      setBookingError("Please select a reported health problem to link with this appointment.");
       return;
     }
 
+    setBookingError(null);
     try {
       await apiRequest(`/users/new-appointment/${doctorId}/${selectedProblemId}`, {
         method: "POST",
@@ -128,9 +135,27 @@ export default function PatientDashboard() {
       setTimeout(() => {
         setAppointmentModal(null);
         setBookingSuccess(null);
+        setBookingError(null);
+        fetchDashboardData();
+        setActiveTab("appointments");
       }, 1500);
     } catch (err: any) {
-      alert("Error booking appointment: " + err.message);
+      setBookingError(err.message || "Failed to schedule appointment.");
+    }
+  };
+
+  const handleConfirmConsultationOver = async (appointmentId: string, doctorId: string) => {
+    try {
+      await apiRequest(`/users/appointment/${doctorId}/${appointmentId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          done_by_user: true
+        })
+      });
+      alert("Consultation marked as completed! If your condition has not improved, you can now schedule a follow-up appointment.");
+      fetchDashboardData();
+    } catch (err: any) {
+      alert("Error completing appointment: " + err.message);
     }
   };
 
@@ -196,6 +221,17 @@ export default function PatientDashboard() {
         </button>
 
         <button
+          onClick={() => setActiveTab("appointments")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+            activeTab === "appointments"
+              ? "bg-[var(--secondary)] text-sky-400 border border-[var(--border)]"
+              : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+          }`}
+        >
+          <Calendar className="w-4 h-4 text-emerald-400" /> My Appointments ({appointments.length})
+        </button>
+
+        <button
           onClick={() => setActiveTab("doctors")}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
             activeTab === "doctors"
@@ -254,6 +290,8 @@ export default function PatientDashboard() {
             <div className="grid grid-cols-1 gap-6">
               {problems.map((prob) => {
                 const solution = solutions.find((s) => s.user_problem === prob._id || (s.user_problem?._id === prob._id));
+                const medicines = prob.ai_analysis?.recommended_medicines || [];
+
                 return (
                   <div
                     key={prob._id}
@@ -268,7 +306,22 @@ export default function PatientDashboard() {
                           {prob.problem}
                         </h3>
                       </div>
-                      <div>{getStatusBadge(prob.status || "pending_doctor_review")}</div>
+                      <div className="flex items-center gap-2">
+                        {getStatusBadge(prob.status || "pending_doctor_review")}
+                        <button
+                          onClick={() => {
+                            setSelectedProblemId(prob._id);
+                            if (doctorsNearMe.length > 0) {
+                              setAppointmentModal(doctorsNearMe[0]);
+                            } else {
+                              setActiveTab("doctors");
+                            }
+                          }}
+                          className="px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-500/15 text-sky-400 border border-sky-500/30 hover:bg-sky-500 hover:text-white transition-colors flex items-center gap-1"
+                        >
+                          <Calendar className="w-3.5 h-3.5" /> Book Follow-Up
+                        </button>
+                      </div>
                     </div>
 
                     <div className="text-xs text-[var(--muted-foreground)] leading-relaxed">
@@ -290,6 +343,42 @@ export default function PatientDashboard() {
                         <p className="text-xs text-[var(--muted-foreground)]">
                           {prob.ai_analysis.analysis_summary}
                         </p>
+                      </div>
+                    )}
+
+                    {/* Recommended Medicines / Supportive Remedies */}
+                    {medicines.length > 0 && (
+                      <div className="p-4 rounded-xl bg-[var(--secondary)] border border-[var(--border)] space-y-2">
+                        <div className="flex items-center justify-between text-xs font-bold text-[var(--foreground)]">
+                          <span className="flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                            Recommended Medications / Supportive Remedies
+                          </span>
+                          <span className="text-[11px] font-normal text-amber-400">
+                            Audited by attending physician
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                          {medicines.map((med: any, idx: number) => (
+                            <div key={idx} className="p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-xs space-y-1">
+                              <div className="flex items-center justify-between font-bold text-[var(--foreground)]">
+                                <span>{med.name}</span>
+                                {med.dosage && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                    {med.dosage}
+                                  </span>
+                                )}
+                              </div>
+                              {med.purpose && (
+                                <p className="text-[11px] text-[var(--muted-foreground)]">{med.purpose}</p>
+                              )}
+                              <p className="text-[10px] font-semibold text-amber-300 flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3 shrink-0 text-amber-400" />
+                                {med.advice || "Ask the nearby specialist before intake"}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
 
@@ -321,6 +410,150 @@ export default function PatientDashboard() {
                       {prob.name && (
                         <span>Patient: {prob.name.first_name} {prob.name.last_name}</span>
                       )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB: My Appointments */}
+      {activeTab === "appointments" && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-bold text-[var(--foreground)]">My Clinical Appointments</h3>
+              <p className="text-xs text-[var(--muted-foreground)]">
+                Track your active doctor consultations. If a health problem has not resolved after your consultation, mark it completed to schedule a follow-up appointment.
+              </p>
+            </div>
+          </div>
+
+          {appointments.length === 0 ? (
+            <div className="bg-[var(--card)] border border-dashed border-[var(--border)] rounded-2xl p-12 text-center space-y-3">
+              <Calendar className="w-10 h-10 text-emerald-400 mx-auto" />
+              <h3 className="text-base font-bold text-[var(--foreground)]">No Scheduled Consultations</h3>
+              <p className="text-xs text-[var(--muted-foreground)] max-w-sm mx-auto">
+                Explore nearby doctors and schedule a consultation linked to one of your reported health problems.
+              </p>
+              <button
+                onClick={() => setActiveTab("doctors")}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 text-white shadow-md inline-flex items-center gap-1.5"
+              >
+                <Stethoscope className="w-3.5 h-3.5" /> Find Nearby Specialist
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-6">
+              {appointments.map((appt: any) => {
+                const isCompleted = appt.done_by_doctor && appt.done_by_user;
+                const isPendingUser = appt.done_by_doctor && !appt.done_by_user;
+
+                return (
+                  <div
+                    key={appt._id}
+                    className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-6 shadow-md space-y-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-emerald-400">
+                            Dr. {appt.doctor?.first_name} {appt.doctor?.last_name} ({appt.doctor?.specialization})
+                          </span>
+                          <span className="text-xs text-[var(--muted-foreground)]">
+                            • {appt.doctor?.city} (PIN: {appt.doctor?.pin_code})
+                          </span>
+                        </div>
+                        <h4 className="text-base font-bold text-[var(--foreground)] mt-1 flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-sky-400" />
+                          Problem: {appt.problem?.problem || "Consultation Case"}
+                        </h4>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {isCompleted ? (
+                          <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                            Consultation Completed
+                          </span>
+                        ) : (
+                          <span className="px-3 py-1 rounded-full text-xs font-bold bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" /> Active Appointment
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                      <div className="p-3 rounded-xl bg-[var(--secondary)] border border-[var(--border)] space-y-1">
+                        <span className="text-[11px] text-[var(--muted-foreground)]">Date & Time:</span>
+                        <p className="font-bold text-[var(--foreground)]">
+                          {new Date(appt.appointment_date || Date.now()).toLocaleDateString()} at {appt.appointment_time}
+                        </p>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-[var(--secondary)] border border-[var(--border)] space-y-1">
+                        <span className="text-[11px] text-[var(--muted-foreground)]">Doctor Review Status:</span>
+                        <p className="font-bold text-[var(--foreground)] flex items-center gap-1">
+                          {appt.done_by_doctor ? (
+                            <span className="text-emerald-400 flex items-center gap-1">
+                              <CheckCircle className="w-3.5 h-3.5" /> Reviewed by Doctor
+                            </span>
+                          ) : (
+                            <span className="text-amber-400 flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5" /> Pending Doctor Session
+                            </span>
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-[var(--secondary)] border border-[var(--border)] space-y-1">
+                        <span className="text-[11px] text-[var(--muted-foreground)]">Patient Resolution:</span>
+                        <p className="font-bold text-[var(--foreground)]">
+                          {appt.done_by_user ? (
+                            <span className="text-emerald-400 flex items-center gap-1">
+                              <CheckCircle className="w-3.5 h-3.5" /> Verified by You
+                            </span>
+                          ) : (
+                            <span className="text-sky-400">In Progress / Ongoing</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Action Bar for completion & follow-ups */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[var(--border)]">
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        {isCompleted ? (
+                          "Problem still persists? You can book another appointment with any specialist."
+                        ) : (
+                          "Only 1 active consultation allowed per problem at a time."
+                        )}
+                      </p>
+
+                      <div className="flex items-center gap-2">
+                        {!appt.done_by_user && (
+                          <button
+                            onClick={() => handleConfirmConsultationOver(appt._id, appt.doctor?._id || appt.doctor)}
+                            className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 text-white hover:bg-emerald-600 transition-colors flex items-center gap-1.5"
+                          >
+                            <CheckCircle className="w-4 h-4" /> Mark Consultation Done
+                          </button>
+                        )}
+
+                        {isCompleted && (
+                          <button
+                            onClick={() => {
+                              setSelectedProblemId(appt.problem?._id || appt.problem);
+                              setAppointmentModal(appt.doctor);
+                            }}
+                            className="px-4 py-2 rounded-xl text-xs font-bold bg-sky-500 text-white hover:bg-sky-600 transition-colors flex items-center gap-1.5"
+                          >
+                            <Calendar className="w-4 h-4" /> Schedule Follow-Up
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -494,6 +727,12 @@ export default function PatientDashboard() {
               </div>
             ) : (
               <div className="space-y-4">
+                {bookingError && (
+                  <div className="p-3.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 text-xs flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
+                    <span>{bookingError}</span>
+                  </div>
+                )}
                 <div>
                   <label className="block text-xs font-semibold text-[var(--foreground)] mb-1">
                     Select Reported Health Problem <span className="text-red-400">*</span>

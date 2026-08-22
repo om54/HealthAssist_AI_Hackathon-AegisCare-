@@ -16,7 +16,8 @@ import {
   Activity,
   Users,
   UserPlus,
-  Lock
+  Lock,
+  Pill
 } from "lucide-react";
 
 type FamilyMember = {
@@ -26,10 +27,19 @@ type FamilyMember = {
   date_of_birth: string;
 };
 
+type MedicineItem = {
+  name: string;
+  dosage?: string;
+  purpose?: string;
+  advice: string;
+};
+
 type TriageResult = {
+  identified_health_problem?: string;
   recommended_specialist: string;
   triage_urgency: string;
   analysis_summary: string;
+  recommended_medicines?: MedicineItem[];
   possible_conditions?: string[];
   suggested_questions_for_doctor?: string[];
   general_health_advice?: string[];
@@ -342,29 +352,78 @@ export default function AITriageWidget() {
           {result ? (
             <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-6 sm:p-8 shadow-xl space-y-6 transition-all animate-fadeIn">
               
-              {/* Header result with specialist badge */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
-                <div>
-                  <span className="text-xs font-semibold text-[var(--muted-foreground)] uppercase">
-                    Recommended Specialist
-                  </span>
-                  <h3 className="text-2xl font-black text-sky-400 mt-0.5 flex items-center gap-2">
-                    <Stethoscope className="w-6 h-6 text-sky-400" />
-                    {result.recommended_specialist}
-                  </h3>
+              {/* Header result with problem identification and specialist badge */}
+              <div className="space-y-3 border-b border-[var(--border)] pb-4">
+                {result.identified_health_problem && (
+                  <div className="p-3.5 rounded-xl bg-sky-500/10 border border-sky-500/30">
+                    <span className="text-[11px] font-extrabold uppercase tracking-wider text-sky-400">
+                      Identified Health Problem
+                    </span>
+                    <h3 className="text-lg font-bold text-[var(--foreground)] mt-0.5">
+                      {result.identified_health_problem}
+                    </h3>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <span className="text-xs font-semibold text-[var(--muted-foreground)] uppercase">
+                      Recommended Specialist
+                    </span>
+                    <h3 className="text-xl font-black text-sky-400 mt-0.5 flex items-center gap-2">
+                      <Stethoscope className="w-5 h-5 text-sky-400" />
+                      {result.recommended_specialist}
+                    </h3>
+                  </div>
+                  {getUrgencyBadge(result.triage_urgency)}
                 </div>
-                {getUrgencyBadge(result.triage_urgency)}
               </div>
 
               {/* Analysis summary */}
               <div>
                 <h4 className="text-xs font-bold text-[var(--foreground)] uppercase tracking-wider mb-1.5">
-                  Clinical Case Summary
+                  Clinical Assessment
                 </h4>
                 <p className="text-sm text-[var(--foreground)] leading-relaxed bg-[var(--secondary)] p-3.5 rounded-xl border border-[var(--border)]">
                   {result.analysis_summary}
                 </p>
               </div>
+
+              {/* Recommended Medicines List */}
+              {result.recommended_medicines && result.recommended_medicines.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold text-[var(--foreground)] uppercase tracking-wider flex items-center gap-1.5">
+                    <Pill className="w-4 h-4 text-emerald-400" />
+                    Recommended Supportive Medicines / Remedies
+                  </h4>
+                  <div className="space-y-2">
+                    {result.recommended_medicines.map((med, idx) => (
+                      <div
+                        key={idx}
+                        className="p-3 rounded-xl bg-[var(--secondary)] border border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-[var(--foreground)]">{med.name}</span>
+                            {med.dosage && (
+                              <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                {med.dosage}
+                              </span>
+                            )}
+                          </div>
+                          {med.purpose && (
+                            <p className="text-xs text-[var(--muted-foreground)] mt-0.5">{med.purpose}</p>
+                          )}
+                        </div>
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 whitespace-nowrap">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          {med.advice || "Ask the nearby specialist before intake"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Possible conditions tags */}
               {result.possible_conditions && result.possible_conditions.length > 0 && (

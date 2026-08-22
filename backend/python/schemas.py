@@ -10,12 +10,26 @@ class HealthAnalysisRequest(BaseModel):
     duration: Optional[str] = Field(None, description="Duration of symptoms")
     preferred_specialist: Optional[str] = Field(None, description="Optional preferred medical specialist")
 
+class MedicineRecommendation(BaseModel):
+    name: str = Field(..., description="Name of medicine or over-the-counter remedy")
+    dosage: Optional[str] = Field(None, description="Suggested standard dosage or usage instruction")
+    purpose: Optional[str] = Field(None, description="Reason / symptom addressed by this medication")
+    advice: str = Field(
+        default="Ask the nearby specialist before intake",
+        description="Important safety notice: Ask the nearby specialist before intake"
+    )
+
 class HealthAnalysisResponse(BaseModel):
+    identified_health_problem: str = Field(..., description="The specific health problem / condition the user is facing based on symptoms")
     recommended_specialist: str
     all_possible_specialists: List[str]
     possible_conditions: List[str]
     triage_urgency: str # e.g., "Routine", "Urgent", "Emergency"
     analysis_summary: str
+    recommended_medicines: List[MedicineRecommendation] = Field(
+        default_factory=list,
+        description="List of medicines or initial remedies for the problem with clear instruction to ask the nearby specialist"
+    )
     suggested_questions_for_doctor: List[str]
     general_health_advice: List[str]
     disclaimer: str

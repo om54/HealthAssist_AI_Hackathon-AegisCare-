@@ -252,8 +252,8 @@ UsersRouter.get("/all-family-members/", UserMiddleware, async (req, res) => {
 // Route to report a new problem for a user
 UsersRouter.post(["/new-problem/", "/new-problem/:_id"], UserMiddleware, async (req, res) => {
     const CheckEntry = z.object({
-        problem: z.string().min(5).max(100),
-        description: z.string().min(10).max(400),
+        problem: z.string().min(5),
+        description: z.string().min(10),
         type: z.string().min(2).max(100),
         family_member_id: z.string().optional()
     });
@@ -352,7 +352,8 @@ UsersRouter.post("/ai-analyze-health/", UserMiddleware, async (req, res) => {
                 gender,
                 medical_history,
                 duration,
-                preferred_specialist
+                preferred_specialist,
+                save_to_db: false
             })
         });
 
@@ -380,15 +381,25 @@ UsersRouter.post("/ai-analyze-health/", UserMiddleware, async (req, res) => {
             savedProblem = await UserProblemModel.create({
                 user,
                 name: familyMemberId,
-                problem: symptoms.length > 80 ? symptoms.slice(0, 80) + "..." : symptoms,
+                problem: aiData.identified_health_problem || symptoms,
                 description: symptoms,
+                symptoms: symptoms,
                 type: problemType._id,
+                patient_profile: {
+                    symptoms: symptoms,
+                    age: age ? Number(age) : null,
+                    gender: gender || null,
+                    duration: duration || null,
+                    medical_history: medical_history || null
+                },
                 ai_analysis: {
+                    identified_health_problem: aiData.identified_health_problem,
                     recommended_specialist: aiData.recommended_specialist,
                     all_possible_specialists: aiData.all_possible_specialists || [],
                     possible_conditions: aiData.possible_conditions || [],
                     triage_urgency: aiData.triage_urgency,
                     analysis_summary: aiData.analysis_summary,
+                    recommended_medicines: aiData.recommended_medicines || [],
                     suggested_questions_for_doctor: aiData.suggested_questions_for_doctor || [],
                     general_health_advice: aiData.general_health_advice || [],
                     disclaimer: aiData.disclaimer
@@ -474,7 +485,33 @@ UsersRouter.get("/doctors-near-me/", UserMiddleware, async (req, res) => {
     }
 });
 
-// Router where the user gets his appointment with the doctor he wants
+// Route for users to view all their appointments with doctors & linked problems
+UsersRouter.get("/my-appointments/", UserMiddleware, async (req, res) => {
+    const userId = req.userId;
+    try {
+        const appointments = await UserAppointmentWithDoctorModel.find({ user: userId })
+            .populate("doctor", "first_name last_name specialization location city pin_code open_time close_time email")
+            .populate({
+                path: "problem",
+                populate: [
+                    { path: "type", select: "name description" },
+                    { path: "name", select: "first_name last_name date_of_birth" }
+                ]
+            })
+            .sort({ appointment_date: -1, created_at: -1 });
+
+        res.json({
+            appointments
+        });
+    } catch (err) {
+        console.log("Error fetching user appointments: " + err);
+        res.status(500).json({
+            error: `Failed to fetch appointments: ${err.message}`
+        });
+    }
+});
+
+// Router where the user gets an appointment with a doctor
 UsersRouter.post("/new-appointment/:_doctorId/:_problemId", UserMiddleware, async (req, res) => {
     const user = req.userId;
     const doctor = req.params._doctorId;
@@ -492,27 +529,54 @@ UsersRouter.post("/new-appointment/:_doctorId/:_problemId", UserMiddleware, asyn
     });
     if (!isValidEntry.success) {
         const errorMessage = isValidEntry.error.issues.map(issue => issue.message).join(", ");
-        console.log("An error has occured. The error is: " + errorMessage);
-        res.status(400).json({
-            error: `An error has occured. The error is: ${errorMessage}`
+        console.log("An error has occurred: " + errorMessage);
+        return res.status(400).json({
+            error: `Validation error: ${errorMessage}`
         });
-        return;
     }
+
     try {
-        await UserAppointmentWithDoctorModel.create({
+        // 1. Verify problem exists and belongs to this user
+        const userProblem = await UserProblemModel.findOne({ _id: problem, user });
+        if (!userProblem) {
+            return res.status(404).json({
+                error: "Health problem not found or not registered under your account."
+            });
+        }
+
+        // 2. Check if user already has an active ongoing appointment for this problem or at the same time
+        const activeAppointment = await UserAppointmentWithDoctorModel.findOne({
+            user,
+            problem,
+            $or: [
+                { done_by_doctor: false },
+                { done_by_user: false }
+            ]
+        });
+
+        if (activeAppointment) {
+            return res.status(400).json({
+                error: "You already have an active appointment scheduled for this health problem. If your problem is not yet resolved, you can book a new follow-up appointment after concluding or verifying the previous consultation."
+            });
+        }
+
+        // 3. Create the new appointment
+        const newAppt = await UserAppointmentWithDoctorModel.create({
             user,
             doctor,
             problem,
             appointment_date: appointment_date ? new Date(appointment_date) : undefined,
             appointment_time
         });
+
         res.json({
-            message: `Your appointment is complete and the date of appointment is ${appointment_date} and the timing is ${appointment_time}`
+            message: `Your appointment is confirmed for ${appointment_date || "today"} at ${appointment_time}.`,
+            appointment_id: newAppt._id
         });
     } catch (err) {
-        console.log(`the error is: ${err}`);
+        console.log(`Error booking appointment: ${err}`);
         res.status(500).json({
-            error: `an error has occured and the error is ${err}`
+            error: `Failed to schedule appointment: ${err.message}`
         });
     }
 });

@@ -61,9 +61,46 @@ async def analyze_health_problem(request: HealthAnalysisRequest):
     """
     Analyzes patient health problems, predicts possible conditions, recommends
     the appropriate specialist, and provides triage urgency and safe advice.
+    Automatically logs and persists AI analyses to MongoDB backend.
     """
     try:
         result = await service.analyze_health_problem(request)
+        
+        # Automatically persist AI analysis into MongoDB
+        try:
+            database = get_database()
+            if database is not None:
+                # Find or create problem_type
+                type_name = result.recommended_specialist or "General Health"
+                problem_type = await database["problem_type"].find_one({"name": type_name})
+                if not problem_type:
+                    type_res = await database["problem_type"].insert_one({
+                        "name": type_name,
+                        "description": f"Health concerns related to {type_name}"
+                    })
+                    type_id = type_res.inserted_id
+                else:
+                    type_id = problem_type["_id"]
+
+                # Insert problem record with full AI analysis and complete symptoms
+                await database["user_problems"].insert_one({
+                    "problem": result.identified_health_problem or request.symptoms,
+                    "description": request.symptoms,
+                    "symptoms": request.symptoms,
+                    "type": type_id,
+                    "ai_analysis": result.model_dump(),
+                    "patient_profile": {
+                        "symptoms": request.symptoms,
+                        "age": request.age,
+                        "gender": request.gender,
+                        "duration": request.duration,
+                        "medical_history": request.medical_history
+                    },
+                    "status": "pending_doctor_review"
+                })
+        except Exception as db_err:
+            print(f"Non-blocking error saving AI analysis to MongoDB: {db_err}")
+
         return result
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
