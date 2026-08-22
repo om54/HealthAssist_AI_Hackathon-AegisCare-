@@ -45,7 +45,7 @@ export default function PatientDashboard() {
   const [appointmentModal, setAppointmentModal] = useState<any | null>(null);
   const [selectedProblemId, setSelectedProblemId] = useState("");
   const [appointmentDate, setAppointmentDate] = useState("");
-  const [appointmentTime, setAppointmentTime] = useState("10:00");
+  const [appointmentTime, setAppointmentTime] = useState("10:00 am");
   const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
 
